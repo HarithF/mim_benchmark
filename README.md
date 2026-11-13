@@ -23,7 +23,7 @@ LSTM/GRU models (36-42) are left out: torch-mlir unrolls their recurrence into
 ./setup.sh      # clone mimir-frontend next to this repo (../mimir-frontend) and build it
 ```
 
-`setup.sh` clones `HarithF/mimir-frontend` (branch `art-eval`; `FRONTEND_URL`,
+`setup.sh` clones [`mimir-frontend`](https://github.com/HarithF/mimir-frontend) (branch `art-eval`; `FRONTEND_URL`,
 `FRONTEND_REF` and `FRONTEND` override it, and an existing checkout is reused)
 and runs its `bootstrap_mimir.sh`, which builds MimIR with its plugins and the
 Python environment. The LLVM/MLIR tools and a Python with torch-mlir have to be
