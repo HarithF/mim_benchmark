@@ -40,6 +40,8 @@ it.
 ./run.sh all --only "1_MLP 44_MiniGPTBlock"      # a subset
 ./run.sh build --force                  # redo instead of skipping finished work
 pipeline/build.sh lower                 # one sub-step: import|data|lower|drivers|compile|refs
+scripts/clear.sh                        # delete everything under work/ for a clean run (asks first)
+scripts/clear.sh reports -y             # or only: exports | build | reports
 ```
 
 Settings live in `config.sh`; every one can be overridden from the environment
@@ -60,7 +62,7 @@ work/mimir/<k>/            frontend sweep output; results/<k>.json = pass/fail p
 work/torch_mlir/<k>.mlir   torch-mlir export (+ <k>.params.txt argument names)
 work/models/NN_<Model>/    benchmark tree: mim_llvm/ mim_mlir_llvm/ mlir_llvm/ bin/ torch_ref/
                            <Model>_{weights,input}.bin, _params.json, _ref.bin
-work/reports/<run_id>/     reporter.py JSON per model, timing.csv, reporter.log
+work/reports/<run_id>/     reporter.py JSON per model, timing.csv, compile_times.{md,csv}, reporter.log
 work/logs/                 per-model export and lowering logs, compile.log
 ```
 
@@ -87,6 +89,16 @@ work/logs/                 per-model export and lowering logs, compile.log
 **3. report** (`pipeline/report.sh`): `reporter.py` per model (`--interleave`,
 pinned to `PIN_CPU`), then `timing_to_csv.py`. A model passes when every
 variant matches the PyTorch reference (rtol 1e-3, atol 1e-2).
+
+It also writes `compile_times.md`/`.csv` (`scripts/compile_times.py`): per model
+and path, the seconds of every compile step (the frontend (MimIR, or
+torch-mlir's conversion to linalg), `mlir-opt`, `mlir-translate`, `opt`, `llc`
+and the final link) plus `to_llvm_ir_s`, PyTorch graph to LLVM IR.
+Tracing the model into an FX graph (`trace_s`: Dynamo for MimIR, `torch.export`
+for torch-mlir) is a separate column, so `to_llvm_ir_s` compares the compilers
+from the same starting point; `end_to_end_s` adds it back. The steps record
+their times while running (`export_mlir.py`, `lower.sh`, `compile_all.sh`, the
+frontend's manifests and its results JSON).
 
 ## Things worth knowing
 

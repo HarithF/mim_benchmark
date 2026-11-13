@@ -19,9 +19,11 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import json
 import signal
 import subprocess
 import sys
+import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -132,6 +134,7 @@ def attempt_export(
     verbose: bool,
     skip_verify: bool,
     strict_verify: bool,
+    timing: dict,
 ):
     """
     One end-to-end attempt for a single already-imported model file.
@@ -198,18 +201,24 @@ def attempt_export(
                 f"WARNING: {msg} (exported anyway; use --strict-verify to fail)"
             )
 
-    # 3. Export to Torch-MLIR / Linalg-on-Tensors (parametric over weights)
+    # 3. Export to Torch-MLIR / Linalg-on-Tensors (parametric over weights).
+    #    torch.export (tracing) and torch-mlir (decompositions, import, lowering
+    #    to linalg) are timed separately; export_and_import does the same two
+    #    steps when given the module directly.
     func_name = sanitize_func_name(path.stem)
     try:
+        started = time.perf_counter()
+        program = torch.export.export(wrapper, (*inputs, *state_values), None, strict=False)
+        traced = time.perf_counter()
         linalg_module = fx.export_and_import(
-            wrapper,
-            *inputs,
-            *state_values,
+            program,
             func_name=func_name,
             output_type=fx.OutputType.LINALG_ON_TENSORS,
             decomposition_table=build_decomposition_table(),
         )
         mlir_text = str(linalg_module)
+        done = time.perf_counter()
+        timing.update(torch_export_s=traced - started, to_linalg_s=done - traced)
     except Exception as e:
         tb = traceback.format_exc() if verbose else str(e)
         return None, [], f"torch-mlir export failed: {tb}", notes
@@ -254,8 +263,9 @@ def export_one(
         )
 
     # 2. Export (parameters and float buffers as arguments).
+    timing: dict = {}
     mlir_text, manifest, error, notes = attempt_export(
-        module, path, seed, verbose, skip_verify, strict_verify
+        module, path, seed, verbose, skip_verify, strict_verify, timing
     )
     if mlir_text is None:
         return ExportResult(path, False, error, notes=notes)
@@ -274,6 +284,9 @@ def export_one(
             f.write(line + "\n")
         for note in notes:
             f.write(f"# {note}\n")
+
+    with open(out_subdir / f"{path.stem}.timing.json", "w") as f:
+        json.dump(timing, f, indent=1)
 
     return ExportResult(path, True, "ok", mlir_path, notes=notes)
 

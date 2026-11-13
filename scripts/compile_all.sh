@@ -144,6 +144,10 @@ echo
 FAILED=()
 BUILT=0
 
+# Wall-clock seconds per step, written to <variant>/<Name>_compile_timing.json.
+now() { date +%s.%N; }
+elapsed() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", b - a }'; }
+
 # mindepth/maxdepth 2 -> MODELS_ROOT/<model>/<variant>
 while IFS= read -r dir_path; do
   variant_name="$(basename "$dir_path")"
@@ -195,7 +199,9 @@ while IFS= read -r dir_path; do
 
   # Middle-end (vectorization); see the header.
   codegen_input="$ll_file"
+  opt_s=0
   if [[ "$RUN_OPT" == true ]]; then
+    t0=$(now)
     echo "    opt:   $(basename "$ll_file") -> $(basename "$bc_file")"
     if ! opt "${OPT_ARGS[@]}" "$ll_file" -o "$bc_file"; then
       echo "!! opt failed for ${rel_dir}"
@@ -204,9 +210,11 @@ while IFS= read -r dir_path; do
       continue
     fi
     codegen_input="$bc_file"
+    opt_s=$(elapsed "$t0" "$(now)")
   fi
 
   echo "    llc:   $(basename "$codegen_input") -> $(basename "$obj_file")"
+  t0=$(now)
   if ! llc "${LLC_ARGS[@]}" -filetype=obj "$codegen_input" -o "$obj_file"; then
     echo "!! llc failed for ${rel_dir}"
     FAILED+=("$rel_dir (llc)")
@@ -214,7 +222,10 @@ while IFS= read -r dir_path; do
     continue
   fi
 
+  llc_s=$(elapsed "$t0" "$(now)")
+
   echo "    clang: $(basename "$c_file") + $(basename "$obj_file") -> ${model_dir}/bin/${bin_name}"
+  t0=$(now)
   if ! clang "${CLANG_ARGS[@]}" "$c_file" "$obj_file" -o "${model_bin_dir}/${bin_name}" \
     -L"${LLVM_LIB_DIR}" \
     -lmlir_c_runner_utils -lmlir_runner_utils \
@@ -225,6 +236,10 @@ while IFS= read -r dir_path; do
     rm -f "$obj_file" "$bc_file"
     continue
   fi
+
+  link_s=$(elapsed "$t0" "$(now)")
+  printf '{"opt_s": %s, "llc_s": %s, "link_s": %s}\n' "$opt_s" "$llc_s" "$link_s" \
+    > "${dir_path}/${model_name}_compile_timing.json"
 
   rm -f "$obj_file" "$bc_file"
   echo "    OK"

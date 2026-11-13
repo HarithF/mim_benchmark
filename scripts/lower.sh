@@ -296,6 +296,11 @@ FAILED=()
 SKIPPED=()
 LOWERED=0
 
+# Wall-clock seconds of the steps of one directory, written to
+# <dir>/<Model>_lower_timing.json for the compile-time report.
+now() { date +%s.%N; }
+elapsed() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", b - a }'; }
+
 for dir in "${dirs[@]}"; do
   dir=${dir%/}
 
@@ -414,6 +419,8 @@ for dir in "${dirs[@]}"; do
     echo "----------------------------------------------------" >&2
   fi
 
+  libm_s=0
+  t0=$(now)
   if ! mlir-opt "$IN" "${PASSES[@]}" -o "$OUT"; then
     echo "!! mlir-opt failed for '$dir' -- skipping (leaving other directories to run)" >&2
     FAILED+=("$dir (mlir-opt)")
@@ -421,9 +428,12 @@ for dir in "${dirs[@]}"; do
     continue
   fi
 
+  mlir_opt_s=$(elapsed "$t0" "$(now)")
+
   # Math ops without an LLVM intrinsic (e.g. math.erf from GELU) become libm
   # calls; only for files that have them.
   if grep -q '= math\.' "$OUT"; then
+    t0=$(now)
     echo "==> [$dir] leftover math ops -> libm calls"
     if ! mlir-opt "$OUT" --convert-math-to-libm --convert-func-to-llvm         --reconcile-unrealized-casts -o "$OUT.libm"; then
       echo "!! mlir-opt (math-to-libm) failed for '$dir' -- skipping" >&2
@@ -432,18 +442,24 @@ for dir in "${dirs[@]}"; do
       continue
     fi
     mv "$OUT.libm" "$OUT"
+    libm_s=$(elapsed "$t0" "$(now)")
   fi
 
   # 01_MLP/mlir_llvm -> 01_MLP/mlir_llvm/MLP_mlir_llvm.ll
   base="$(basename "$dir")"
   LL="$dir/${model}_${base}.ll"
   echo "==> [$dir] $(basename "$OUT") -> $(basename "$LL")"
+  t0=$(now)
   if ! mlir-translate --mlir-to-llvmir "$OUT" -o "$LL"; then
     echo "!! mlir-translate failed for '$dir' -- skipping (leaving other directories to run)" >&2
     FAILED+=("$dir (mlir-translate)")
     rm -f "$LL"
     continue
   fi
+
+  translate_s=$(elapsed "$t0" "$(now)")
+  printf '{"mlir_opt_s": %s, "libm_s": %s, "mlir_translate_s": %s}\n' \
+    "$mlir_opt_s" "$libm_s" "$translate_s" > "$dir/${model}_lower_timing.json"
 
   LOWERED=$((LOWERED + 1))
 done
