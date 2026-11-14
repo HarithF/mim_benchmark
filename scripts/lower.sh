@@ -166,11 +166,14 @@ module attributes {transform.with_named_sequence} {
   }
 
   // mim's batched matmul over a split reduction, rank 5: (b, m, n, k_outer,
-  // k_inner). `n` is unit-stride in the output and in the right operand and
-  // the left operand is invariant along it, so move it innermost.
+  // k_inner). Move `n` innermost, then tile 32^3 like torch-mlir's batch
+  // matmul, since the right operand may be strided along n.
   transform.named_sequence @bmm_mim_n_innermost(%op: !transform.any_op {transform.consumed}) {
-    transform.structured.interchange %op iterator_interchange = [0, 1, 3, 4, 2]
+    %i = transform.structured.interchange %op iterator_interchange = [0, 1, 3, 4, 2]
         : (!transform.any_op) -> !transform.any_op
+    // Loops are now (b, m, k_outer, k_inner, n); k_inner is 4 (1 if k % 4 != 0).
+    %t, %l0, %l1, %l2, %l3 = transform.structured.tile_using_for %i tile_sizes [1, 32, 8, 0, 32]
+        : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
     transform.yield
   }
 
