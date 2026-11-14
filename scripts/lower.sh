@@ -340,7 +340,7 @@ for dir in "${dirs[@]}"; do
   # torch-mlir unrolls RNN timesteps (34k-68k linalg.generic ops; the largest
   # other model has ~830), and bufferization never finishes on those: skip.
   if [[ "$(basename "$dir")" == "mlir_llvm" ]]; then
-    nops="$(grep -c 'linalg.generic' "$IN")"
+    nops="$(grep -c 'linalg.generic' "$IN" || true)"  # grep -c exits 1 on 0 matches
     if (( nops > 5000 )); then
       echo "!! skipping '$dir': torch-mlir unrolled this RNN to ${nops} linalg.generic ops (>5000); bufferize never finishes on it. The looped mim_mlir_llvm variant covers this model." >&2
       rm -f "$OUT" "$dir/${model}_mlir_llvm.ll"
