@@ -226,10 +226,17 @@ while IFS= read -r dir_path; do
 
   echo "    clang: $(basename "$c_file") + $(basename "$obj_file") -> ${model_dir}/bin/${bin_name}"
   t0=$(now)
+  # MimIR's nvptx host code calls the CUDA driver API; the toolkit's stub stands
+  # in for libcuda at link time, the driver's libcuda.so.1 is loaded at run time.
+  extra_libs=()
+  if [[ "$variant_name" == *nvptx* ]]; then
+    extra_libs=(-L"${CUDA_HOME:-/opt/cuda}/lib64/stubs" -lcuda)
+  fi
   if ! clang "${CLANG_ARGS[@]}" "$c_file" "$obj_file" -o "${model_bin_dir}/${bin_name}" \
     -L"${LLVM_LIB_DIR}" \
     -lmlir_c_runner_utils -lmlir_runner_utils \
     -Wl,-rpath,"${LLVM_LIB_DIR}" \
+    "${extra_libs[@]}" \
     -lm; then
     echo "!! clang failed for ${rel_dir}"
     FAILED+=("$rel_dir (clang)")

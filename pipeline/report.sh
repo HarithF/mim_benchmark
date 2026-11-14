@@ -44,6 +44,6 @@ done
 
 "$PYTHON" "$SCRIPTS/timing_to_csv.py" "$OUT"/*_"$RUN_ID".json -o "$OUT/timing.csv" > /dev/null 2>&1 \
   && echo "  timings: $OUT/timing.csv" || echo "  timing_to_csv.py failed (reports are in $OUT)"
-"$PYTHON" "$SCRIPTS/compile_times.py" --mimir-out "$MIMIR_OUT" --torch-out "$TORCH_OUT" \
+"$PYTHON" "$SCRIPTS/compile_times.py" --mimir-out "$MIMIR_OUT" --torch-out "$TORCH_OUT" --mimir-gpu-out "$MIMIR_GPU_OUT" \
   --models "$MODELS_DIR" --out "$OUT/compile_times" > /dev/null \
   && echo "  compile times: $OUT/compile_times.md (.csv)" || echo "  compile_times.py failed"

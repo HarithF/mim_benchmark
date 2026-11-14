@@ -20,9 +20,16 @@ Columns (seconds; empty when a step does not apply or was not recorded):
   total_s          to_llvm_ir_s + opt_s + llc_s + link_s
   end_to_end_s     trace_s + total_s
 
+GPU paths (TARGET=gpu|both): mim_nvptx reads like mim_llvm (its frontend_s
+includes the NVPTX emission: ptxas + fatbinary); iree_cuda has frontend_s =
+iree-turbine export and total_s = export + iree-compile (straight to a .vmfb,
+so the LLVM IR, opt, llc and link columns stay empty).
+
 Sources: <mimir_out>/<k>/*_manifest.json (frontend), <mimir_out>/results/<k>.json
 (Dynamo tracing: dynamo_trace, mlir_dynamo_trace), <torch_out>/<k>.timing.json
-(export_mlir.py), <models>/<NN_Model>/<variant>/*_{lower,compile}_timing.json.
+(export_mlir.py), <models>/<NN_Model>/<variant>/*_{lower,compile}_timing.json,
+and for the GPU paths <mimir_gpu_out> (as <mimir_out>) and
+<models>/<NN_Model>/iree_cuda/*.iree.json.
 
     python3 scripts/compile_times.py --mimir-out work/mimir --torch-out work/torch_mlir \\
         --models work/models --out work/reports/compile_times
@@ -35,7 +42,7 @@ import glob
 import json
 import os
 
-PATHS = ("mim_llvm", "mim_mlir_llvm", "mlir_llvm")
+PATHS = ("mim_llvm", "mim_mlir_llvm", "mlir_llvm", "mim_nvptx", "iree_cuda")
 COLUMNS = ("trace_s", "frontend_s", "mlir_opt_s", "libm_s", "mlir_translate_s",
            "to_llvm_ir_s", "opt_s", "llc_s", "link_s", "total_s", "end_to_end_s")
 
@@ -71,7 +78,7 @@ def add(*values):
     return sum(present) if present else None
 
 
-def rows_for(model_dir, mimir_out, torch_out):
+def rows_for(model_dir, mimir_out, torch_out, mimir_gpu_out=None):
     name = os.path.basename(model_dir)                        # 01_MLP
     stem = f"{int(name.split('_', 1)[0])}_{name.split('_', 1)[1]}"  # 1_MLP
     mimir_dir = os.path.join(mimir_out, stem)
@@ -92,6 +99,18 @@ def rows_for(model_dir, mimir_out, torch_out):
             if t:
                 r["frontend_s"] = add(t.get("decompose"), t.get("mlir"))
             r["trace_s"] = traced.get("mlir_dynamo_trace")
+        elif path == "mim_nvptx":
+            t = manifest_timings(os.path.join(mimir_gpu_out or "", stem), mlir=False)
+            if t:
+                r["frontend_s"] = add(t.get("decompose"), t.get("translate"), t.get("optimize"))
+            r["trace_s"] = runner_timings(mimir_gpu_out or "", stem).get("dynamo_trace")
+        elif path == "iree_cuda":
+            t = load(os.path.join(vdir, "*.iree.json")).get("timings") or {}
+            r["frontend_s"] = t.get("export_s")
+            r["total_s"] = add(t.get("export_s"), t.get("iree_compile_s"))
+            r["end_to_end_s"] = r["total_s"]
+            rows.append((name, path, r))
+            continue
         else:
             t = load(os.path.join(torch_out, f"{stem}.timing.json"))
             r["trace_s"] = t.get("torch_export_s")
@@ -118,13 +137,14 @@ def main():
     ap.add_argument("--mimir-out", required=True)
     ap.add_argument("--torch-out", required=True)
     ap.add_argument("--models", required=True)
+    ap.add_argument("--mimir-gpu-out", default=None, help="MimIR GPU export (TARGET=gpu|both)")
     ap.add_argument("--out", required=True, help="output prefix (.csv and .md are appended)")
     args = ap.parse_args()
 
     rows = []
     for model_dir in sorted(glob.glob(os.path.join(args.models, "[0-9]*_*"))):
         if os.path.isdir(model_dir):
-            rows.extend(rows_for(model_dir, args.mimir_out, args.torch_out))
+            rows.extend(rows_for(model_dir, args.mimir_out, args.torch_out, args.mimir_gpu_out))
     if not rows:
         raise SystemExit(f"no models under {args.models}")
 

@@ -134,7 +134,7 @@ def parse_param(param_str):
 
 
 def parse_signature(ll_text, filename_hint=None):
-    m = DEFINE_RE.search(ll_text)
+    m = param_manifest.model_define(DEFINE_RE, ll_text)
     if not m:
         raise ValueError(
             f"Could not find a `define ... @Name(...)` line"
@@ -143,8 +143,8 @@ def parse_signature(ll_text, filename_hint=None):
     name = m.group("name")
     args_str = m.group("args")
 
-    ret_m = re.search(
-        r"define\s+(.*?)\s+@" + re.escape(name) + r"\s*\(", ll_text, re.DOTALL
+    ret_m = re.match(
+        r"define\s+(.*?)\s+@" + re.escape(name) + r"\s*\(", ll_text[m.start():], re.DOTALL
     )
     ret_type_str = clean_type(ret_m.group(1))
     ret_dims, ret_base = parse_array_type(ret_type_str)
@@ -268,15 +268,25 @@ def gen_input_array(dims, base, rng):
 # ---------------------------------------------------------------------------
 
 
+# MimIR variants whose .ll defines the shapes and weights.bin layout, in order of
+# preference (mim_nvptx has mim_llvm's signature; it is used for GPU-only runs).
+SHAPE_SOURCES = ("mim_llvm", "mim_nvptx")
+
+
 def find_mim_llvm_ll_files(root):
-    """Yield (ll_path, model_root_dir) for every .ll file found inside a
-    directory named 'mim_llvm' anywhere under root."""
+    """Yield (ll_path, model_root_dir) once per model: the .ll files of its first
+    SHAPE_SOURCES directory."""
     for dirpath, dirnames, filenames in os.walk(root):
-        if os.path.basename(dirpath) == "mim_llvm":
-            model_root = os.path.dirname(dirpath)
-            for fn in sorted(filenames):
-                if fn.endswith(".ll"):
-                    yield os.path.join(dirpath, fn), model_root
+        source = os.path.basename(dirpath)
+        if source not in SHAPE_SOURCES:
+            continue
+        model_root = os.path.dirname(dirpath)
+        preferred = next(s for s in SHAPE_SOURCES if os.path.isdir(os.path.join(model_root, s)))
+        if source != preferred:
+            continue
+        for fn in sorted(filenames):
+            if fn.endswith(".ll"):
+                yield os.path.join(dirpath, fn), model_root
 
 
 def find_sibling_params_txt(model_root):
@@ -605,7 +615,8 @@ def main():
     for ll_path, model_root in find_mim_llvm_ll_files(args.root):
         found_any = True
         try:
-            model_name = os.path.splitext(os.path.basename(ll_path))[0]
+            # Seeded by <Name>_mim either way, so a GPU-only run gets the CPU run's data.
+            model_name = os.path.splitext(os.path.basename(ll_path))[0].removesuffix("_nvptx")
             rng = np.random.default_rng(
                 [
                     args.seed if args.seed is not None else 0,
@@ -624,7 +635,7 @@ def main():
             print(f"[ERROR] {ll_path}: {e}", file=sys.stderr)
 
     if not found_any:
-        print(f"No mim_llvm/*.ll files found under {args.root}", file=sys.stderr)
+        print(f"No mim_llvm/*.ll or mim_nvptx/*.ll files found under {args.root}", file=sys.stderr)
 
 
 if __name__ == "__main__":

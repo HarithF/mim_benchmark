@@ -1,6 +1,8 @@
-# KernelBench level-3 benchmark: MimIR vs torch-mlir
+# KernelBench level-3 benchmark: MimIR vs torch-mlir (CPU) and IREE (GPU)
 
-Compiles KernelBench level-3 models three ways and times them with one harness:
+Compiles KernelBench level-3 models several ways and times them with one
+harness. `TARGET` (or `./run.sh --target`) picks the variants: `cpu` (default),
+`gpu`, or `both`. On the CPU:
 
 | variant          | frontend                         | to LLVM IR                               |
 |------------------|----------------------------------|------------------------------------------|
@@ -13,7 +15,20 @@ by C drivers from `scripts/gen_drivers.py`: the same data loading, a forked
 child per call, and `clock_gettime` around nothing but the model call. Only
 the call's argument list differs (raw pointers vs MLIR memref descriptors).
 
-`models.txt` holds the 36 level-3 models that compile on all three paths. The
+On the GPU (`TARGET=gpu`):
+
+| variant      | frontend                                 | to a GPU binary                                   |
+|--------------|------------------------------------------|---------------------------------------------------|
+| `mim_nvptx`  | mimir-frontend with `MIMIR_TARGET=nvptx` | host `.ll` with an embedded fatbin, same C driver |
+| `iree_cuda`  | iree-turbine (`scripts/export_iree.py`)  | `iree-compile` for CUDA, `scripts/iree_driver.py` |
+
+`mim_nvptx` needs a frontend with the nvptx target (`MIMIR_TARGET=nvptx`) and the CUDA
+toolkit's `ptxas` and `fatbinary` on PATH. Its
+binary creates the CUDA context and copies data per op inside every timed call,
+while `iree_cuda` is timed at steady state (setup reported as `setup_ns`), so
+the two GPU timings are not directly comparable yet.
+
+`models.txt` holds the 36 level-3 models that compile on all three CPU paths. The
 LSTM/GRU models (36-42) are left out: torch-mlir unrolls their recurrence into
 34k-68k ops, which its MLIR lowering does not finish.
 
@@ -34,13 +49,14 @@ it.
 
 ```bash
 ./run.sh                    # export -> build -> report, every model in models.txt
+./run.sh --target gpu       # the same for the GPU variants (work_gpu/); --target both: all five
 ./run.sh export             # 1. MimIR frontend (.ll + .mlir) and torch-mlir (.mlir)
 ./run.sh build              # 2. import, data, lower, drivers, compile, references
 ./run.sh report             # 3. run all variants, compare with PyTorch, timings
 ./run.sh all --only "1_MLP 44_MiniGPTBlock"      # a subset
 ./run.sh build --force                  # redo instead of skipping finished work
 pipeline/build.sh lower                 # one sub-step: import|data|lower|drivers|compile|refs
-scripts/clear.sh                        # delete everything under work/ for a clean run (asks first)
+scripts/clear.sh                        # delete everything under the target's work dir (asks first)
 scripts/clear.sh reports -y             # or only: exports | build | reports
 ```
 
@@ -54,12 +70,18 @@ Settings live in `config.sh`; every one can be overridden from the environment
 | `PYTHON`          | Python with `numpy` + `torch`                     | `python3`                        |
 | `LLVM_LIB_DIR`    | dir with `libmlir_c_runner_utils.so`              | `lib/` next to the `mlir-opt` on PATH |
 | PATH              | `mlir-opt`, `mlir-translate`, `opt`, `llc`, `clang` | |
+| GPU only: `GPU_SM`  | compute capability, e.g. `120`                  | from `nvidia-smi`                |
+| GPU only: `CUDA_HOME` | CUDA toolkit (`lib64/stubs/libcuda.so` to link; `ptxas`, `fatbinary` on PATH for the export) | `/opt/cuda` |
+| GPU only: `IREE_PY` | Python with `torch`, `iree-turbine`, `iree-base-compiler`, `iree-base-runtime` | `python3` |
 
-Everything is written under `work/`:
+Everything is written under `work/` (`work_gpu/` or `work_both/` for the other
+targets, so their results never mix):
 
 ```
 work/mimir/<k>/            frontend sweep output; results/<k>.json = pass/fail per path
 work/torch_mlir/<k>.mlir   torch-mlir export (+ <k>.params.txt argument names)
+work/mimir_gpu/<k>/        GPU frontend sweep (TARGET=gpu|both)
+work/iree/<k>/             IREE export: <k>_cuda.vmfb + <k>.iree.json (TARGET=gpu|both)
 work/models/NN_<Model>/    benchmark tree: mim_llvm/ mim_mlir_llvm/ mlir_llvm/ bin/ torch_ref/
                            <Model>_{weights,input}.bin, _params.json, _ref.bin
 work/reports/<run_id>/     reporter.py JSON per model, timing.csv, compile_times.{md,csv}, reporter.log
@@ -74,12 +96,18 @@ work/logs/                 per-model export and lowering logs, compile.log
   runs it and compares with eager PyTorch, and emits and verifies the MLIR.
 - torch-mlir: `scripts/export_mlir.py`, which passes floating-point buffers as
   arguments and writes `<k>.params.txt` naming every argument.
+- GPU: the same MimIR runner with `MIMIR_TARGET=nvptx`, and
+  `scripts/export_iree.py`, which externalizes parameters by name so the IREE
+  driver binds them from the same `weights.bin`.
 
 **2. build** (`pipeline/build.sh`)
-1. *import*: only models that passed on both MimIR paths and have a torch-mlir
-   export (`ALLOW_UNVERIFIED=1` relaxes the first condition).
+1. *import*: CPU: only models that passed on both MimIR paths and have a
+   torch-mlir export (`ALLOW_UNVERIFIED=1` relaxes the first condition). GPU:
+   `mim_nvptx` if its run passed and the fatbin is embedded, then `iree_cuda`.
 2. *data* (`scripts/gen_data.py`): random weights and input, seeded per
-   model, plus `<Model>_params.json` naming every slot of `weights.bin`.
+   model, plus `<Model>_params.json` naming every slot of `weights.bin`. The
+   layout comes from MimIR's `.ll` (`mim_llvm`, else `mim_nvptx`, which has the
+   same signature), so CPU and GPU runs get identical data.
 3. *lower* (`scripts/lower.sh`) both MLIR variants, `LOWER_JOBS` in parallel.
 4. *drivers* (`scripts/gen_drivers.py`): every weight argument of every
    variant bound by name to its slot in `weights.bin`.

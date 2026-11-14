@@ -24,11 +24,25 @@ collect_dirs() {
 }
 
 # --- import ----------------------------------------------------------------------
-# A model is imported only if BOTH frontends produced it (and, unless
-# ALLOW_UNVERIFIED=1, the MimIR run passed on both of its paths), so every
-# model in the tree has all three variants.
+# TARGET=cpu: a model is imported only if BOTH CPU frontends produced it (and,
+# unless ALLOW_UNVERIFIED=1, the MimIR run passed on both of its paths), so every
+# model has all three CPU variants. TARGET=gpu: mim_nvptx, then iree_cuda for the
+# models that have it. MimIR's .ll (mim_llvm, else mim_nvptx) is the shape and
+# weight-layout source for data, drivers and the reporter.
 step_import() {
   log "import -> $MODELS_DIR"
+  if want_cpu; then import_cpu; fi
+  if want_gpu; then import_mimir_gpu; import_iree; fi
+  # The PyTorch source, for the reference output and for forward()'s input order.
+  local k d
+  for k in "${MODELS[@]}"; do
+    d="$MODELS_DIR/$(model_dir_name "$k")"
+    [[ -d "$d/mim_llvm" || -d "$d/mim_nvptx" ]] || continue
+    rm -rf "$d/torch_ref" && mkdir -p "$d/torch_ref" && cp "$KERNELBENCH_DIR/$k.py" "$d/torch_ref/"
+  done
+}
+
+import_cpu() {
   local stage="$WORK/stage" k res why n_ok=0
   rm -rf "$stage" && mkdir -p "$stage/mimir" "$stage/torch"
   for k in "${MODELS[@]}"; do
@@ -57,15 +71,86 @@ EOF
     ln -s "$TORCH_OUT/$k.mlir" "$TORCH_OUT/$k.params.txt" "$stage/torch/"
     n_ok=$((n_ok + 1))
   done
-  echo "  $n_ok of ${#MODELS[@]} model(s) importable"
+  echo "  $n_ok of ${#MODELS[@]} model(s) importable (CPU)"
   [[ $n_ok -gt 0 ]] || return 0
   "$SCRIPTS/import_mimir.sh" "$stage/mimir" "$MODELS_DIR" | tail -1
   "$SCRIPTS/import_torch_mlir.sh" "$stage/torch" "$MODELS_DIR" | tail -1
-  # The PyTorch source, for the reference output and for forward()'s input order.
+}
+
+# <k>/mimir_graph_<hash>.ll (host code with the device fatbin embedded)
+# -> NN_<Model>/mim_nvptx/<Model>_mim_nvptx.ll, symbol renamed to @<Model> as
+# import_mimir.sh does. Its signature equals mim_llvm's. _dev.ll is not needed.
+import_mimir_gpu() {
+  local k d model res sym why n_ok=0 lls
   for k in "${MODELS[@]}"; do
-    [[ -L "$stage/mimir/$k" ]] || continue
     d="$MODELS_DIR/$(model_dir_name "$k")"
-    rm -rf "$d/torch_ref" && mkdir -p "$d/torch_ref" && cp "$KERNELBENCH_DIR/$k.py" "$d/torch_ref/"
+    res="$MIMIR_GPU_OUT/results/$k.json"
+    mapfile -t lls < <(find "$MIMIR_GPU_OUT/$k" -maxdepth 1 -name 'mimir_graph_*.ll' ! -name '*_dev.ll' 2>/dev/null)
+    why=""
+    if [[ ! -f "$res" ]]; then
+      why="no MimIR GPU export"
+    elif [[ "$ALLOW_UNVERIFIED" != 1 ]] && ! "$PYTHON" - "$res" <<'EOF'
+import json, sys
+r = json.load(open(sys.argv[1])); r = (r["results"] if isinstance(r, dict) else r)[0]
+sys.exit(0 if r["status"] == "PASS" else 1)
+EOF
+    then
+      why="MimIR GPU run did not pass (ALLOW_UNVERIFIED=1 to import anyway)"
+    elif [[ ${#lls[@]} -ne 1 ]]; then
+      why="expected one host mimir_graph_*.ll in $MIMIR_GPU_OUT/$k, found ${#lls[@]}"
+    elif ! grep -q '^@.fatbin = private constant' "${lls[0]}"; then
+      why="no embedded fatbin in $(basename "${lls[0]}") (ptxas/fatbinary missing at export?)"
+    fi
+    if [[ -n "$why" ]]; then
+      echo "  skip $k (mim_nvptx): $why"
+      continue
+    fi
+    model="${k#*_}"
+    mkdir -p "$d/mim_nvptx"
+    sym="$(basename "${lls[0]}" .ll)"
+    sed "s/@${sym}\b/@${model}/g" "${lls[0]}" > "$d/mim_nvptx/${model}_mim_nvptx.ll.tmp"
+    if cmp -s "$d/mim_nvptx/${model}_mim_nvptx.ll.tmp" "$d/mim_nvptx/${model}_mim_nvptx.ll"; then
+      rm -f "$d/mim_nvptx/${model}_mim_nvptx.ll.tmp"
+    else
+      mv -f "$d/mim_nvptx/${model}_mim_nvptx.ll.tmp" "$d/mim_nvptx/${model}_mim_nvptx.ll"
+    fi
+    n_ok=$((n_ok + 1))
+  done
+  echo "  $n_ok model(s) with a mim_nvptx variant"
+}
+
+# $IREE_OUT/<k>/{<k>_cuda.vmfb,<k>.iree.json} -> NN_<Model>/iree_cuda/. Needs a
+# MimIR variant in the same model dir (its .ll defines weights.bin's layout).
+# The executable bin/iree_cuda is a wrapper written by the compile step.
+import_iree() {
+  local k d n_ok=0
+  for k in "${MODELS[@]}"; do
+    d="$MODELS_DIR/$(model_dir_name "$k")"
+    if [[ ! -f "$IREE_OUT/$k/$k.iree.json" || ! -f "$IREE_OUT/$k/${k}_cuda.vmfb" ]]; then
+      echo "  skip $k (iree_cuda): no IREE export"
+      continue
+    fi
+    if [[ ! -d "$d/mim_llvm" && ! -d "$d/mim_nvptx" ]]; then
+      echo "  skip $k (iree_cuda): no MimIR variant to take the weight layout from"
+      continue
+    fi
+    rm -rf "$d/iree_cuda" && mkdir -p "$d/iree_cuda"
+    cp "$IREE_OUT/$k/${k}_cuda.vmfb" "$d/iree_cuda/"
+    cp "$IREE_OUT/$k/$k.iree.json" "$d/iree_cuda/${k#*_}.iree.json"
+    n_ok=$((n_ok + 1))
+  done
+  echo "  $n_ok model(s) with an iree_cuda variant"
+}
+
+# bin/iree_cuda: runs scripts/iree_driver.py with IREE_PY, same command line as the C drivers.
+write_iree_wrappers() {
+  local d meta
+  for d in "${DIRS[@]}"; do
+    meta=$(find "$d/iree_cuda" -maxdepth 1 -name '*.iree.json' 2>/dev/null | head -1 || true)
+    [[ -n "$meta" ]] || continue
+    mkdir -p "$d/bin"
+    printf '#!/usr/bin/env bash\nexec %q %q %q "$@"\n' "$IREE_PY" "$SCRIPTS/iree_driver.py" "$meta" > "$d/bin/iree_cuda"
+    chmod +x "$d/bin/iree_cuda"
   done
 }
 
@@ -75,7 +160,7 @@ step_data() {
   collect_dirs
   local d m ll force
   for d in "${DIRS[@]}"; do
-    ll=$(find "$d/mim_llvm" -maxdepth 1 -name '*.ll' | head -1)
+    ll=$(find "$d/mim_llvm" "$d/mim_nvptx" -maxdepth 1 -name '*.ll' 2>/dev/null | head -1 || true)
     m=$(find "$d" -maxdepth 1 -name '*_params.json' | head -1)
     force=()
     if [[ "${FORCE:-0}" == 1 || -z "$m" || ( -n "$ll" && "$ll" -nt "$m" ) ]]; then force=(--force); fi
@@ -108,7 +193,7 @@ step_lower() {
   local d v src ll todo=()
   for d in "${DIRS[@]}"; do
     for v in mlir_llvm mim_mlir_llvm; do
-      src=$(find "$d/$v" -maxdepth 1 -name '*.mlir' ! -name '*_lowered.mlir' 2>/dev/null | head -1)
+      src=$(find "$d/$v" -maxdepth 1 -name '*.mlir' ! -name '*_lowered.mlir' 2>/dev/null | head -1 || true)
       [[ -n "$src" ]] || continue
       ll=$(find "$d/$v" -maxdepth 1 -name '*.ll' | head -1)
       if [[ "${FORCE:-0}" != 1 && -n "$ll" && "$ll" -nt "$src" ]]; then continue; fi
@@ -141,9 +226,11 @@ step_compile() {
   COMPILE_ONLY="${names[*]}" "$SCRIPTS/compile_all.sh" "$MODELS_DIR" "$OPT_LEVEL" "$LLVM_LIB_DIR" \
     > "$LOGS/compile.log" 2>&1 || true
   grep -E '^!!|==> Done|failed' "$LOGS/compile.log" || true
-  local n_missing=0 v
+  local n_missing=0 v variants
+  mapfile -t variants < <(target_variants)
+  if want_gpu; then write_iree_wrappers; fi
   for d in "${DIRS[@]}"; do
-    for v in mim_llvm mim_mlir_llvm mlir_llvm; do
+    for v in "${variants[@]}"; do
       [[ -x "$d/bin/$v" ]] || { echo "  missing binary: $(basename "$d")/bin/$v"; n_missing=$((n_missing + 1)); }
     done
   done

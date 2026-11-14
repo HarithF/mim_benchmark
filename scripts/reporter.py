@@ -124,13 +124,13 @@ def classify_arg_types(arg_type_strs):
 def parse_raw_signature(text):
     """(name, params [(dims, base)], return_dims, return_base) of a raw-pointer
     .ll, or None for another calling convention."""
-    m = DEFINE_RE.search(text)
+    m = param_manifest.model_define(DEFINE_RE, text)
     if not m:
         return None
     name = m.group("name")
     args_str = m.group("args")
-    ret_m = re.search(
-        r"define\s+(.*?)\s+@" + re.escape(name) + r"\s*\(", text, re.DOTALL
+    ret_m = re.match(
+        r"define\s+(.*?)\s+@" + re.escape(name) + r"\s*\(", text[m.start():], re.DOTALL
     )
     ret_type_str = strip_addrspace(ret_m.group(1).strip()).rstrip("*").strip()
 

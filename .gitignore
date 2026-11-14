@@ -1,3 +1,5 @@
 work/
+work_gpu/
+work_both/
 __pycache__/
 *.pyc

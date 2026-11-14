@@ -5,9 +5,10 @@
 #   scripts/clear.sh -y         ... without asking
 #   scripts/clear.sh build      only the build stage's outputs (models/, stage/)
 #   scripts/clear.sh reports    only reports/
-#   scripts/clear.sh exports    only the exports (mimir/, torch_mlir/, jit_cache/)
+#   scripts/clear.sh exports    only the exports (mimir/, torch_mlir/, mimir_gpu/, iree/, jit_cache/)
 #
-# The repository and mimir-frontend are never touched.
+# Clears TARGET's work dir (work/, work_gpu/ or work_both/). The repository and
+# mimir-frontend are never touched.
 source "$(dirname "${BASH_SOURCE[0]}")/../pipeline/common.sh"
 
 what="all"
@@ -16,7 +17,7 @@ for arg in "$@"; do
   case "$arg" in
     -y|--yes) assume_yes=1 ;;
     all|exports|build|reports) what="$arg" ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) die "unknown argument: $arg (see --help)" ;;
   esac
 done
@@ -28,7 +29,8 @@ done
 
 case "$what" in
   all)     targets=("$work") ;;
-  exports) targets=("$MIMIR_OUT" "$TORCH_OUT" "$work/jit_cache" "$work/no_fixtures" "$LOGS/export_mimir" "$LOGS/export_torch") ;;
+  exports) targets=("$MIMIR_OUT" "$TORCH_OUT" "$MIMIR_GPU_OUT" "$IREE_OUT" "$work/jit_cache" "$work/no_fixtures"
+                   "$LOGS/export_mimir" "$LOGS/export_torch" "$LOGS/export_mimir_gpu" "$LOGS/export_iree") ;;
   build)   targets=("$MODELS_DIR" "$work/stage" "$LOGS/lower" "$LOGS/compile.log") ;;
   reports) targets=("$REPORTS_DIR") ;;
 esac

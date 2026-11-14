@@ -45,6 +45,15 @@ _ACCESSOR_RE = re.compile(r"(?:^|_)(modules|parameters|buffers)_")
 _NOISE_COMPONENTS = ("dict",)
 
 
+def model_define(define_re, text):
+    """The model's `define` match: the first one whose name is not a MimIR runtime
+    helper (the nvptx host IR defines e.g. @mim_cu_check ahead of the model).
+    Matched at each `define` line so one cannot swallow the next."""
+    starts = (s.start() for s in re.finditer(r"^define\b", text, re.MULTILINE))
+    matches = (define_re.match(text, pos) for pos in starts)
+    return next((m for m in matches if m and not m.group("name").startswith("mim_")), None)
+
+
 def demangle_mim_name(raw):
     """mim `.ll` / `.mlir` argument name -> canonical torch state_dict name, or
     None if the name has no attribute path (the input `l_x_`, anonymous `%_N`)."""

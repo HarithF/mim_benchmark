@@ -401,7 +401,7 @@ class Signature:
 
 
 def extract_define(text, filename_hint=None):
-    m = DEFINE_RE.search(text)
+    m = param_manifest.model_define(DEFINE_RE, text)
     if not m:
         raise ValueError(
             "Could not find a `define ... @Name(...) {` line"
