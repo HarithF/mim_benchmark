@@ -6,7 +6,8 @@
 #
 # Output: $REPORTS_DIR/<run_id>/ with one <model>_<run_id>.json per model
 # (reporter.py), timing.csv (timing_to_csv.py), compile_times.{md,csv}
-# (compile_times.py) and reporter.log.
+# (compile_times.py), summary.md with the geometric means (geomean.py) and
+# reporter.log.
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 load_models
@@ -47,3 +48,4 @@ done
 "$PYTHON" "$SCRIPTS/compile_times.py" --mimir-out "$MIMIR_OUT" --torch-out "$TORCH_OUT" --mimir-gpu-out "$MIMIR_GPU_OUT" \
   --models "$MODELS_DIR" --out "$OUT/compile_times" > /dev/null \
   && echo "  compile times: $OUT/compile_times.md (.csv)" || echo "  compile_times.py failed"
+"$PYTHON" "$SCRIPTS/geomean.py" "$OUT" || echo "  geomean.py failed"
