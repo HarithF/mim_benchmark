@@ -51,7 +51,15 @@ def model_define(define_re, text):
     Matched at each `define` line so one cannot swallow the next."""
     starts = (s.start() for s in re.finditer(r"^define\b", text, re.MULTILINE))
     matches = (define_re.match(text, pos) for pos in starts)
-    return next((m for m in matches if m and not m.group("name").startswith("mim_")), None)
+    # A define whose own name the pattern rejects (e.g. @.mimir_gpu_session) would
+    # otherwise match the first @callee( in its body: the name must be on the
+    # `define` line itself.
+    return next(
+        (m for m in matches
+         if m and "\n" not in text[m.start():m.start("name")]
+         and not m.group("name").startswith("mim_")),
+        None,
+    )
 
 
 def demangle_mim_name(raw):
