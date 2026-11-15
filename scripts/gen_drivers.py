@@ -986,6 +986,12 @@ def generate_mim_driver(sig, input_idx, variant_name):
     )
     call_args = ", ".join(p.cname for p in params)
 
+    # MimIR's GPU session is set up on a process's first call: keep it untimed.
+    child_warmup = (
+        f"        free({name}({call_args}));  /* untimed GPU session setup */\n"
+        if "nvptx" in variant_name else ""
+    )
+
     count_decls = "\n".join(
         f"static const size_t {p.cname}_count = {total_elems(p.dims)};" for p in params
     )
@@ -1149,7 +1155,7 @@ int main(int argc, char **argv) {{
       if (p < 0) {{ perror("fork"); return 1; }}
       if (p == 0) {{
         struct timespec t0, t1;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
+{child_warmup}        clock_gettime(CLOCK_MONOTONIC, &t0);
         float *cur = {name}({call_args});
         clock_gettime(CLOCK_MONOTONIC, &t1);
         times[i] = (double)(t1.tv_sec - t0.tv_sec) * 1e9 +

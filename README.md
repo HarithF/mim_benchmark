@@ -23,10 +23,9 @@ On the GPU (`TARGET=gpu`):
 | `iree_cuda`  | iree-turbine (`scripts/export_iree.py`)  | `iree-compile` for CUDA, `scripts/iree_driver.py` |
 
 `mim_nvptx` needs a frontend with the nvptx target (`MIMIR_TARGET=nvptx`) and the CUDA
-toolkit's `ptxas` and `fatbinary` on PATH. Its
-binary creates the CUDA context and copies data per op inside every timed call,
-while `iree_cuda` is timed at steady state (setup reported as `setup_ns`), so
-the two GPU timings are not directly comparable yet.
+toolkit's `ptxas` and `fatbinary` on PATH. GPU session setup is not timed for
+either variant. One difference remains: MimIR copies the weights to the device
+in every call, IREE once during setup.
 
 `models.txt` holds the 36 level-3 models that compile on all three CPU paths. The
 LSTM/GRU models (36-42) are left out: torch-mlir unrolls their recurrence into
