@@ -20,9 +20,9 @@ How the numbers are measured is described in [`artifact_evaluation.md`](artifact
 
 33 models were measured. Of the 35 models in `models.txt`, `31_VisionAttention` is left out
 (its 8.6 GB attention matrix does not fit this GPU's 16 GB, for `mim_nvptx` and for `iree_cuda`)
-and `16_DenseNet201` does not compile with this frontend revision (`cannot coerce to core.Ptr`).
-`mim_nvptx` passes the correctness check on all 33; `iree_cuda` passes on 32 and fails the
-check on one (†). Median runtime per call;
+and `10_ResNet101` is left out because its `iree_cuda` output fails the correctness check
+(max diff / scale 2.8; `mim_nvptx` passes); with it, the geometric mean is 1.22 (34 models).
+Both variants pass the correctness check on all 33 models. Median runtime per call;
 the ratio column divides by the IREE baseline `iree_cuda` (below 1 = faster than IREE).
 
 | model | `mim_nvptx` (ms) | `iree_cuda` (ms) | `mim_nvptx` / `iree_cuda` |
@@ -36,12 +36,12 @@ the ratio column divides by the IREE baseline `iree_cuda` (below 1 = faster than
 | 07_GoogleNetInceptionV1 | 298.1 | 204.0 | 1.46 |
 | 08_ResNetBasicBlock | 184.3 | 201.6 | 0.91 |
 | 09_ResNet18 | 167.2 | 163.0 | 1.03 |
-| 10_ResNet101 † | 1017.3 | 4061.5 | 0.25 |
 | 11_VGG16 | 1110.2 | 509.3 | 2.18 |
 | 12_VGG19 | 1381.0 | 582.0 | 2.37 |
 | 13_DenseNet121TransitionLayer | 463.1 | 749.9 | 0.62 |
 | 14_DenseNet121DenseBlock | 810.3 | 453.8 | 1.79 |
 | 15_DenseNet121 | 526.6 | 268.8 | 1.96 |
+| 16_DenseNet201 | 994.0 | 474.3 | 2.10 |
 | 18_SqueezeNet | 1924.0 | 2281.4 | 0.84 |
 | 19_MobileNetV1 | 185.7 | 175.7 | 1.06 |
 | 20_MobileNetV2 | 173.5 | 168.8 | 1.03 |
@@ -60,17 +60,13 @@ the ratio column divides by the IREE baseline `iree_cuda` (below 1 = faster than
 | 46_NetVladWithGhostClusters | 508.9 | 341.9 | 1.49 |
 | 47_NetVladNoGhostClusters | 498.3 | 341.5 | 1.46 |
 | 50_ReLUSelfAttention | 636.4 | 295.3 | 2.15 |
-| **geometric mean** | | | **1.20** |
-
-† `10_ResNet101`: the `iree_cuda` output fails the correctness check (max diff / scale 2.8;
-`mim_nvptx` passes). Its timing is still in the table and in the geometric mean; without this
-model the geometric mean is 1.26 (32 models).
+| **geometric mean** | | | **1.28** |
 
 The geometric mean is that of `scripts/geomean.py`: per model the `mim_nvptx` median over
 `iree_cuda`'s, averaged over the 33 models that have both variants.
 
-`mim_nvptx` is slower than IREE in the geometric mean (1.20x) and faster on 13 of 33 models;
-the ratios range from 0.25 (`10_ResNet101`, †) to 2.48 (`43_MinGPTCausalAttention`).
+`mim_nvptx` is slower than IREE in the geometric mean (1.28x) and faster on 12 of 33 models;
+the ratios range from 0.59 (`05_AlexNet`) to 2.48 (`43_MinGPTCausalAttention`).
 
 ## Compile time
 
@@ -87,21 +83,21 @@ both variants have; the `mim_nvptx`-only rows are computed the same way from
 
 | column | models | `mim_nvptx` | `iree_cuda` |
 |---|---:|---:|---:|
-| `trace_s` | 33 | 0.21 |  |
-| `frontend_s` | 33 | 0.61 | 1.41 |
-| `to_llvm_ir_s` | 33 | 0.61 |  |
+| `trace_s` | 33 | 0.22 |  |
+| `frontend_s` | 33 | 0.64 | 1.43 |
+| `to_llvm_ir_s` | 33 | 0.64 |  |
 | `opt_s` | 33 | 0.05 |  |
-| `llc_s` | 33 | 0.10 |  |
+| `llc_s` | 33 | 0.11 |  |
 | `link_s` | 33 | 0.11 |  |
-| `total_s` | 33 | 0.93 | 2.65 |
-| `end_to_end_s` | 33 | 1.17 | 2.65 |
+| `total_s` | 33 | 0.98 | 2.75 |
+| `end_to_end_s` | 33 | 1.22 | 2.75 |
 
 Sums over all 33 models:
 
 | variant | `trace_s` | `frontend_s` | `to_llvm_ir_s` | `opt_s` | `llc_s` | `link_s` | `total_s` | `end_to_end_s` |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `mim_nvptx` | 11.3 | 35.2 | 35.2 | 2.8 | 6.7 | 3.7 | 48.5 | 59.7 |
-| `iree_cuda` |  | 61.0 |  |  |  |  | 113.5 | 113.5 |
+| `mim_nvptx` | 12.5 | 45.9 | 45.9 | 8.3 | 9.8 | 3.6 | 67.6 | 80.0 |
+| `iree_cuda` |  | 63.9 |  |  |  |  | 138.9 | 138.9 |
 
 Per model (the full table with every step is `results/gpu/compile_times.csv`):
 
@@ -125,8 +121,6 @@ Per model (the full table with every step is `results/gpu/compile_times.csv`):
 | 08_ResNetBasicBlock | `iree_cuda` |  | 0.65 |  |  |  | 1.08 | 1.08 |
 | 09_ResNet18 | `mim_nvptx` | 0.35 | 0.73 | 0.07 | 0.18 | 0.11 | 1.09 | 1.43 |
 | 09_ResNet18 | `iree_cuda` |  | 1.74 |  |  |  | 3.24 | 3.24 |
-| 10_ResNet101 | `mim_nvptx` | 1.37 | 2.79 | 0.35 | 0.90 | 0.27 | 4.31 | 5.68 |
-| 10_ResNet101 | `iree_cuda` |  | 6.84 |  |  |  | 10.74 | 10.74 |
 | 11_VGG16 | `mim_nvptx` | 0.16 | 0.45 | 0.03 | 0.08 | 0.10 | 0.66 | 0.82 |
 | 11_VGG16 | `iree_cuda` |  | 1.11 |  |  |  | 2.12 | 2.12 |
 | 12_VGG19 | `mim_nvptx` | 0.17 | 0.51 | 0.04 | 0.10 | 0.10 | 0.74 | 0.92 |
@@ -137,6 +131,8 @@ Per model (the full table with every step is `results/gpu/compile_times.csv`):
 | 14_DenseNet121DenseBlock | `iree_cuda` |  | 0.95 |  |  |  | 1.72 | 1.72 |
 | 15_DenseNet121 | `mim_nvptx` | 1.61 | 4.24 | 0.61 | 1.31 | 0.15 | 6.31 | 7.92 |
 | 15_DenseNet121 | `iree_cuda` |  | 5.89 |  |  |  | 16.12 | 16.12 |
+| 16_DenseNet201 | `mim_nvptx` | 2.59 | 13.52 | 5.76 | 3.91 | 0.21 | 23.40 | 25.99 |
+| 16_DenseNet201 | `iree_cuda` |  | 9.73 |  |  |  | 36.18 | 36.18 |
 | 18_SqueezeNet | `mim_nvptx` | 0.22 | 0.74 | 0.05 | 0.13 | 0.11 | 1.03 | 1.25 |
 | 18_SqueezeNet | `iree_cuda` |  | 1.17 |  |  |  | 2.52 | 2.52 |
 | 19_MobileNetV1 | `mim_nvptx` | 0.45 | 0.83 | 0.08 | 0.23 | 0.12 | 1.26 | 1.71 |

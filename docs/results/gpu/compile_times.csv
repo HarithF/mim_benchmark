@@ -17,8 +17,6 @@ model,path,trace_s,frontend_s,mlir_opt_s,libm_s,mlir_translate_s,to_llvm_ir_s,op
 08_ResNetBasicBlock,iree_cuda,,0.649,,,,,,,,1.079,1.079
 09_ResNet18,mim_nvptx,0.348,0.728,,,,0.728,0.070,0.177,0.110,1.086,1.434
 09_ResNet18,iree_cuda,,1.738,,,,,,,,3.236,3.236
-10_ResNet101,mim_nvptx,1.373,2.795,,,,2.795,0.352,0.898,0.265,4.309,5.682
-10_ResNet101,iree_cuda,,6.841,,,,,,,,10.736,10.736
 11_VGG16,mim_nvptx,0.159,0.454,,,,0.454,0.034,0.078,0.099,0.664,0.823
 11_VGG16,iree_cuda,,1.111,,,,,,,,2.116,2.116
 12_VGG19,mim_nvptx,0.172,0.511,,,,0.511,0.040,0.095,0.099,0.744,0.916
@@ -29,6 +27,8 @@ model,path,trace_s,frontend_s,mlir_opt_s,libm_s,mlir_translate_s,to_llvm_ir_s,op
 14_DenseNet121DenseBlock,iree_cuda,,0.953,,,,,,,,1.720,1.720
 15_DenseNet121,mim_nvptx,1.613,4.239,,,,4.239,0.607,1.310,0.153,6.309,7.922
 15_DenseNet121,iree_cuda,,5.892,,,,,,,,16.121,16.121
+16_DenseNet201,mim_nvptx,2.586,13.521,,,,13.521,5.762,3.913,0.208,23.404,25.990
+16_DenseNet201,iree_cuda,,9.729,,,,,,,,36.178,36.178
 18_SqueezeNet,mim_nvptx,0.219,0.741,,,,0.741,0.054,0.127,0.110,1.032,1.251
 18_SqueezeNet,iree_cuda,,1.166,,,,,,,,2.519,2.519
 19_MobileNetV1,mim_nvptx,0.449,0.835,,,,0.835,0.077,0.229,0.116,1.257,1.706
