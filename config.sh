@@ -4,7 +4,7 @@
 # --- inputs ------------------------------------------------------------------
 # mimir-frontend checkout (bootstrapped: `uv run --no-sync` must work there).
 # Default: the sibling directory, as in rebuttal/ and in the fv-docker image.
-FRONTEND="${FRONTEND:-$(cd "$BENCH_ROOT/.." && pwd)/mimir-frontend}"
+FRONTEND="${FRONTEND:-$(cd "$BENCH_ROOT/.." && pwd)/mimir-frontend-nightly}"
 # KernelBench level-3 sources; torch-mlir exports and torch references use these.
 KERNELBENCH_DIR="${KERNELBENCH_DIR:-$FRONTEND/KernelBench/KernelBench/level3}"
 # Python with torch + torch_mlir (export only).
