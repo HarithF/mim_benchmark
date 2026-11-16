@@ -35,7 +35,7 @@ measures this for every model and pipeline, split into the individual compile st
 | Time to prepare workflow | `./setup.sh` builds the MimIR front end; with Docker, about 20 min to load the image or about 1.5 h on 16 cores to build it |
 | Time to complete experiments | basic test *TBD* min; E1 and E2 *TBD* h, of which about 2 h are timed runs; E3 *TBD* h |
 | Publicly available | yes |
-| Code licenses | MimIR MIT; LLVM, MLIR, Torch-MLIR and IREE Apache 2.0 with LLVM exceptions; PyTorch BSD-3-Clause; front end and harness *TBD* |
+| Code licenses | MimIR MIT; LLVM, MLIR, Torch-MLIR and IREE Apache 2.0 with LLVM exceptions; PyTorch BSD-3-Clause; front end and harness MIT |
 | Data licenses | KernelBench MIT |
 | Workflow frameworks used | Bash and Python scripts; optionally Docker |
 | Archived | *TBD* (Zenodo DOI) |
@@ -168,7 +168,8 @@ On an RTX 4060 Ti, MimIR takes 1.28× as long as IREE in the geometric mean over
 Inception module, the DenseNet transition layer and EfficientNetMBConv. It falls behind on the
 attention models, VGG and the DenseNets, by up to 2.48× on MinGPTCausalAttention. ResNet101 is left
 out because IREE's output for it fails the correctness check. VisionAttention needs a GPU with more
-than 16 GB of memory. *TBD: pin IREE to the versions behind the paper's numbers.*
+than 16 GB of memory. The Docker image pins IREE to the versions behind these numbers (`iree-base-compiler` and
+`iree-base-runtime` 3.14.0, `iree-turbine` 3.9.0).
 
 ### E4: Implementation cost
 
