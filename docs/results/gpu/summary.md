@@ -49,3 +49,8 @@
 | `end_to_end_s` | 33 | 1.22 | 2.75 |
 
 Columns as in `compile_times.md`; each is averaged over the models that have it for every path.
+
+Not included: `10_ResNet101` (IREE's CUDA output fails the correctness check) and
+`31_VisionAttention` (needs more than 16 GB of GPU memory). Both work on the CPU, relative to
+`mlir_llvm`: `10_ResNet101` 0.98 (`mim_llvm`) and 1.15 (`mim_mlir_llvm`), `31_VisionAttention`
+0.85 and 0.88; see `../cpu/summary.md`.

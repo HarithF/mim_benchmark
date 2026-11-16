@@ -20,6 +20,16 @@ How the numbers are measured is described in [`artifact_evaluation.md`](artifact
 All 35 models pass on all three variants (35/35). Median runtime per call; the
 ratio columns divide by the torch-mlir baseline `mlir_llvm` (below 1 = faster than torch-mlir).
 
+**Note.** `10_ResNet101` and `31_VisionAttention` are part of these results but not of the GPU
+results ([`results_gpu.md`](results_gpu.md)): on the GPU, IREE's output for `10_ResNet101` fails
+the correctness check (MimIR's passes), and `31_VisionAttention` needs more than the 16 GB of the
+GPU used there. On the CPU both pass on all three variants:
+
+| model | `mim_llvm` (ms) | `mim_mlir_llvm` (ms) | `mlir_llvm` (ms) | `mim_llvm` / `mlir_llvm` | `mim_mlir_llvm` / `mlir_llvm` |
+|---|---:|---:|---:|---:|---:|
+| 10_ResNet101 | 4638.6 | 5456.7 | 4746.6 | 0.98 | 1.15 |
+| 31_VisionAttention | 19145.2 | 19900.5 | 22656.7 | 0.85 | 0.88 |
+
 | model | `mim_llvm` (ms) | `mim_mlir_llvm` (ms) | `mlir_llvm` (ms) | `mim_llvm` / `mlir_llvm` | `mim_mlir_llvm` / `mlir_llvm` |
 |---|---:|---:|---:|---:|---:|
 | 01_MLP | 7521.8 | 9812.5 | 17491.0 | 0.43 | 0.56 |

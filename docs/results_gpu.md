@@ -12,7 +12,7 @@ How the numbers are measured is described in [`artifact_evaluation.md`](artifact
 |---|---|
 | GPU | NVIDIA GeForce RTX 4060 Ti (16 GB, compute capability 8.9, `sm_89`), driver 615.78.08 |
 | Host | Intel Core i5-10600KF, 12 CPUs, 31 GiB; runs pinned to core 2; governor `schedutil` (frequency not pinned); memory limited to 24 GB, no swap (`systemd-run -p MemoryMax=24G -p MemorySwapMax=0`) |
-| Software | mimir-frontend branch `concat-gpu` (`61e5909`), MimIR `6a1b4fa`; IREE 3.14.0, iree-turbine 3.9.0; PyTorch 2.15.0 (CPU build) |
+| Software | IREE 3.14.0, iree-turbine 3.9.0; PyTorch 2.15.0 (CPU build) |
 | Measurement | 5 reps per variant, interleaved, one fresh process per call (CUDA setup, module load and weight upload are part of every timed call, for both variants), median reported |
 | Correctness | every variant against the PyTorch output, rtol 1e-3, atol 1e-2 |
 
@@ -24,6 +24,17 @@ and `10_ResNet101` is left out because its `iree_cuda` output fails the correctn
 (max diff / scale 2.8; `mim_nvptx` passes); with it, the geometric mean is 1.22 (34 models).
 Both variants pass the correctness check on all 33 models. Median runtime per call;
 the ratio column divides by the IREE baseline `iree_cuda` (below 1 = faster than IREE).
+
+**Note.** Both models left out here work on the CPU, where every variant passes the correctness
+check and both are part of the geometric means in [`results_cpu.md`](results_cpu.md). They are
+missing on the GPU only for GPU-specific reasons: `10_ResNet101` because IREE's CUDA output is
+wrong (MimIR's is correct), `31_VisionAttention` because it needs more than this GPU's 16 GB of
+memory. Their CPU results:
+
+| model | `mim_llvm` (ms) | `mim_mlir_llvm` (ms) | `mlir_llvm` (ms) | `mim_llvm` / `mlir_llvm` | `mim_mlir_llvm` / `mlir_llvm` |
+|---|---:|---:|---:|---:|---:|
+| 10_ResNet101 | 4638.6 | 5456.7 | 4746.6 | 0.98 | 1.15 |
+| 31_VisionAttention | 19145.2 | 19900.5 | 22656.7 | 0.85 | 0.88 |
 
 | model | `mim_nvptx` (ms) | `iree_cuda` (ms) | `mim_nvptx` / `iree_cuda` |
 |---|---:|---:|---:|
