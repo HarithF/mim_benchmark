@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -301,22 +302,49 @@ def find_sibling_params_txt(model_root):
                 yield variant, os.path.join(vdir, fn)
 
 
+def find_sibling_iree_params(model_root):
+    """Yield (variant_dir_name, [{"name", "dims"}]) for the IREE export's
+    parameters. The .iree.json lists names only; the shapes come from the
+    reference model. Read after every .params.txt, so a CPU run's slots are
+    unchanged."""
+    for variant in sorted(os.listdir(model_root)):
+        vdir = os.path.join(model_root, variant)
+        if not os.path.isdir(vdir):
+            continue
+        for fn in sorted(os.listdir(vdir)):
+            if fn.endswith(".iree.json"):
+                with open(os.path.join(vdir, fn)) as f:
+                    names = json.load(f).get("params", [])
+                state = None
+                args = []
+                for name in names:
+                    if state is None:
+                        state = reference_state(model_root)
+                    t = state.get(name)
+                    args.append({"name": name, "dims": list(t.shape)} if t is not None else None)
+                yield variant, args
+
+
 def append_foreign_params(manifest, model_root):
-    """Add slots for parameters torch-mlir takes but mim does not (torch.export
-    keeps unused parameters, e.g. 50's c_proj). They go after every mim slot,
-    so the mim offsets do not change. Returns the added (name, variant)
-    pairs."""
+    """Add slots for parameters another frontend takes but mim does not
+    (torch.export keeps unused parameters, e.g. 50's c_proj; 44's closure
+    parameters have other names). They go after every mim slot, so the mim
+    offsets do not change. Returns the added (name, variant) pairs."""
     known = {e["name"] for e in manifest["entries"] if e["named"]}
     # Foreign (torch.export-style) params are nn.Parameters, always float32.
     float_size = TYPE_SIZES["float"][1]
     byte_off = manifest["total_bytes"]
     added = []
-    for variant, ptxt in find_sibling_params_txt(model_root):
-        try:
-            args = param_manifest.parse_params_txt(ptxt)
-        except Exception as e:
-            print(f"    NOTE: could not read {os.path.basename(ptxt)}: {e}")
-            continue
+
+    def sources():
+        for variant, ptxt in find_sibling_params_txt(model_root):
+            try:
+                yield variant, param_manifest.parse_params_txt(ptxt)
+            except Exception as e:
+                print(f"    NOTE: could not read {os.path.basename(ptxt)}: {e}")
+        yield from find_sibling_iree_params(model_root)
+
+    for variant, args in sources():
         for a in args:
             if a is None or a["name"] in known:
                 continue
@@ -349,13 +377,8 @@ def append_foreign_params(manifest, model_root):
 _INT_DTYPES = {"i8": np.int8, "i16": np.int16, "i32": np.int32, "i64": np.int64}
 
 
-def model_integer_buffers(model_root, entries):
-    """Integer slots (e.g. 30's relative_position_index lookup tables) get the
-    constructed model's buffer values: random indices run out of range.
-    Returns {slot name: array}; empty for an all-float model."""
-    wanted = [e for e in entries if e["base"] in _INT_DTYPES]
-    if not wanted:
-        return {}
+def reference_model(model_root):
+    """The constructed PyTorch model from <model_root>/torch_ref/<k>.py."""
     import importlib.util
 
     import torch
@@ -363,17 +386,30 @@ def model_integer_buffers(model_root, entries):
     ref_dir = os.path.join(model_root, "torch_ref")
     pys = sorted(f for f in os.listdir(ref_dir) if f.endswith(".py")) if os.path.isdir(ref_dir) else []
     if len(pys) != 1:
-        raise ValueError(
-            f"{len(wanted)} integer slot(s) need the model's buffers, but "
-            f"{ref_dir} does not hold exactly one .py ({pys})"
-        )
+        raise ValueError(f"{ref_dir} does not hold exactly one .py ({pys})")
     spec = importlib.util.spec_from_file_location("gen_data_ref", os.path.join(ref_dir, pys[0]))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     init = mod.get_init_inputs() if hasattr(mod, "get_init_inputs") else []
     torch.manual_seed(0)
     with torch.no_grad():
-        model = mod.Model(*init).eval()
+        return mod.Model(*init).eval(), pys[0]
+
+
+def reference_state(model_root):
+    """{name: tensor} of the reference model's parameters and buffers."""
+    return dict(reference_model(model_root)[0].state_dict())
+
+
+def model_integer_buffers(model_root, entries):
+    """Integer slots (e.g. 30's relative_position_index lookup tables) get the
+    constructed model's buffer values: random indices run out of range.
+    Returns {slot name: array}; empty for an all-float model."""
+    wanted = [e for e in entries if e["base"] in _INT_DTYPES]
+    if not wanted:
+        return {}
+    model, py = reference_model(model_root)
+    pys = [py]
     state = dict(model.state_dict())
     out = {}
     for e in wanted:
