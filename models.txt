@@ -26,7 +26,6 @@
 27_RegNet
 28_VisionTransformer
 29_SwinMLP
-30_SwinTransformerV2
 31_VisionAttention
 43_MinGPTCausalAttention
 44_MiniGPTBlock

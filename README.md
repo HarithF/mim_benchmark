@@ -27,9 +27,14 @@ toolkit's `ptxas` and `fatbinary` on PATH. Both are timed like the CPU variants,
 one fresh process per call: the timed call includes CUDA setup, module load and
 the weight upload (MimIR's binary also copies data per op), as well as the call.
 
-`models.txt` holds the 36 level-3 models that compile on all three CPU paths. The
-LSTM/GRU models (36-42) are left out: torch-mlir unrolls their recurrence into
-34k-68k ops, which its MLIR lowering does not finish.
+`models.txt` holds the 35 level-3 models that compile on all three CPU paths and
+on the GPU. The RNN/LSTM/GRU models (33-42) are left out: they take more than one
+input (the sequence plus the initial hidden/cell state), and the drivers only
+support single-input models. MimIR can emit code for them. 30_SwinTransformerV2 is
+left out because its runtime checks cannot be lowered on the GPU yet.
+
+Results and the artifact-evaluation write-up (including what each compile-time step means) are in
+[`docs/`](docs/README.md).
 
 ## Setup
 
@@ -41,8 +46,8 @@ LSTM/GRU models (36-42) are left out: torch-mlir unrolls their recurrence into
 `FRONTEND_REF` and `FRONTEND` override it, and an existing checkout is reused)
 and runs its `bootstrap_mimir.sh`, which builds MimIR with its plugins and the
 Python environment. The LLVM/MLIR tools and a Python with torch-mlir have to be
-provided separately (see the table below); the fv-docker image provides all of
-it.
+provided separately (see the table below); the [Docker image](tbd) of Zenodo record, which contains this
+harness, provides all of it and can be used instead.
 
 ## Usage
 
