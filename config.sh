@@ -35,18 +35,18 @@ IREE_TIMEOUT="${IREE_TIMEOUT:-1800}"
 # --- outputs -------------------------------------------------------------------
 # One work dir per target, so CPU and GPU results never mix.
 if [[ "$TARGET" == cpu ]]; then WORK="${WORK:-$BENCH_ROOT/work}"; else WORK="${WORK:-$BENCH_ROOT/work_$TARGET}"; fi
-MIMIR_OUT="${MIMIR_OUT:-$WORK/mimir}"          # MimIR CPU export: <k>/mimir_graph_*.{ll,mlir}
-TORCH_OUT="${TORCH_OUT:-$WORK/torch_mlir}"     # torch-mlir export: <k>.mlir + <k>.params.txt
+MIMIR_OUT="${MIMIR_OUT:-$WORK/mimir}"             # MimIR CPU export: <k>/mimir_graph_*.{ll,mlir}
+TORCH_OUT="${TORCH_OUT:-$WORK/torch_mlir}"        # torch-mlir export: <k>.mlir + <k>.params.txt
 MIMIR_GPU_OUT="${MIMIR_GPU_OUT:-$WORK/mimir_gpu}" # MimIR GPU export: <k>/mimir_graph_*.ll (+ _dev.ll)
-IREE_OUT="${IREE_OUT:-$WORK/iree}"             # IREE export: <k>/<k>_cuda.vmfb + <k>.iree.json
-MODELS_DIR="${MODELS_DIR:-$WORK/models}"       # benchmark tree: NN_<Model>/{<variant>/,bin/,...}
+IREE_OUT="${IREE_OUT:-$WORK/iree}"                # IREE export: <k>/<k>_cuda.vmfb + <k>.iree.json
+MODELS_DIR="${MODELS_DIR:-$WORK/models}"          # benchmark tree: NN_<Model>/{<variant>/,bin/,...}
 REPORTS_DIR="${REPORTS_DIR:-$WORK/reports}"
 LOGS="${LOGS:-$WORK/logs}"
 
 # --- 1. export -------------------------------------------------------------------
 # MimIR frontend at KernelBench's native sizes (no fixture overlay, divisor 1).
-MIMIR_TIMEOUT="${MIMIR_TIMEOUT:-3600}" # seconds per model
-MIMIR_MAX_MEMORY_GB="${MIMIR_MAX_MEMORY_GB:-40}"
+MIMIR_TIMEOUT="${MIMIR_TIMEOUT:-3600}"          # seconds per model
+MIMIR_MAX_MEMORY_GB="${MIMIR_MAX_MEMORY_GB:-0}" #no memory limit
 MIMIR_MAX_FP_ITERS="${MIMIR_MAX_FP_ITERS:-8192}"
 TORCH_EXPORT_TIMEOUT="${TORCH_EXPORT_TIMEOUT:-1800}"
 
