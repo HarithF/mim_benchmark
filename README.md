@@ -54,6 +54,7 @@ it.
 ./run.sh report             # 3. run all variants, compare with PyTorch, timings
 ./run.sh all --only "1_MLP 44_MiniGPTBlock"      # a subset
 ./run.sh build --force                  # redo instead of skipping finished work
+scripts/geomean.py work/reports/<run_id> --models models.txt   # geometric means over a model list
 pipeline/build.sh lower                 # one sub-step: import|data|lower|drivers|compile|refs
 scripts/clear.sh                        # delete everything under the target's work dir (asks first)
 scripts/clear.sh reports -y             # or only: exports | build | reports
@@ -83,7 +84,7 @@ work/mimir_gpu/<k>/        GPU frontend sweep (TARGET=gpu|both)
 work/iree/<k>/             IREE export: <k>_cuda.vmfb + <k>.iree.json (TARGET=gpu|both)
 work/models/NN_<Model>/    benchmark tree: mim_llvm/ mim_mlir_llvm/ mlir_llvm/ bin/ torch_ref/
                            <Model>_{weights,input}.bin, _params.json, _ref.bin
-work/reports/<run_id>/     reporter.py JSON per model, timing.csv, compile_times.{md,csv}, reporter.log
+work/reports/<run_id>/     reporter.py JSON per model, timing.csv, compile_times.{md,csv}, summary.md, reporter.log
 work/logs/                 per-model export and lowering logs, compile.log
 ```
 
@@ -126,6 +127,15 @@ for torch-mlir) is a separate column, so `to_llvm_ir_s` compares the compilers
 from the same starting point; `end_to_end_s` adds it back. The steps record
 their times while running (`export_mlir.py`, `lower.sh`, `compile_all.sh`, the
 frontend's manifests and its results JSON).
+
+Last, `scripts/geomean.py` prints the geometric means and writes them to
+`summary.md`. For run time, it takes each variant's median over the
+reference's (`mlir_llvm` on the CPU, `iree_cuda` on the GPU) per model, and
+averages over the models that have a median for every variant of the target;
+the per-model ratios are in `summary.md` too. For compile time, it averages
+every column of `compile_times.csv` per path, over the models that have the
+column for every path. `--models FILE` restricts both to the models a file
+lists, e.g. to compare a run of every model with a smaller selection.
 
 ## Things worth knowing
 
