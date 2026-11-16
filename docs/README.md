@@ -5,5 +5,5 @@
 - [`results_cpu.md`](results_cpu.md): runtime and compile-time results on the CPU (35 models,
   `mim_llvm` and `mim_mlir_llvm` against torch-mlir). Raw data and geometric means in
   [`results/cpu/`](results/cpu/).
-- [`results_gpu.md`](results_gpu.md): GPU results (`mim_nvptx` against IREE), placeholder until the
-  final measurements.
+- [`results_gpu.md`](results_gpu.md): GPU results (33 models, `mim_nvptx` against IREE, on an
+  RTX 4060 Ti). Raw data and geometric means in [`results/gpu/`](results/gpu/).
