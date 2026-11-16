@@ -416,10 +416,16 @@ def run_torch_reference(module_path, weights_path, input_path, shape, manifest):
         )
         return None
 
-    blob = open(weights_path, "rb").read()
-    # Start from the module's own state: anything the manifest does not cover
-    # (BatchNorm's num_batches_tracked) keeps its constructed value.
-    state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+    # weights.bin is mapped and each slot copied straight into the module's own
+    # tensor, so a multi-GB blob is held once (2_ShallowWideMLP: 8.6 GB) instead
+    # of as file contents, cloned state and model at the same time. Anything the
+    # manifest does not cover (BatchNorm's num_batches_tracked) keeps its
+    # constructed value.
+    if os.path.getsize(weights_path):
+        blob = np.memmap(weights_path, dtype=np.uint8, mode="r")
+    else:
+        blob = np.empty(0, dtype=np.uint8)  # an empty file cannot be mapped
+    state = model.state_dict()
     unmatched = []
     try:
         for e in manifest["entries"]:
@@ -448,9 +454,9 @@ def run_torch_reference(module_path, weights_path, input_path, shape, manifest):
                     f"{e['count']} {base} at byte {off}, got {len(seg)}"
                 )
             chunk = np.frombuffer(seg, dtype=dtype)
-            state[key] = torch.from_numpy(
-                chunk.reshape(tuple(state[key].shape)).copy()
-            ).to(state[key].dtype)
+            src = torch.from_numpy(chunk.reshape(tuple(state[key].shape)).copy())
+            with torch.no_grad():
+                state[key].copy_(src)
     except Exception as e:
         print(
             f"warn: failed to bind weights.bin to {module_path}'s Model: {e}",
@@ -471,11 +477,7 @@ def run_torch_reference(module_path, weights_path, input_path, shape, manifest):
         )
         return None
 
-    try:
-        model.load_state_dict(state, strict=True)
-    except Exception as e:
-        print(f"warn: load_state_dict failed for {module_path}: {e}", file=sys.stderr)
-        return None
+    del blob, state
 
     x = np.fromfile(input_path, dtype=np.float32)
 
@@ -518,6 +520,17 @@ def run_torch_reference(module_path, weights_path, input_path, shape, manifest):
         return None
 
     return out.numpy().astype(np.float32).reshape(-1)
+
+
+def load_cached_reference(model_dir, name, ref_module):
+    """The output produce_refs.py cached (<Name>_ref.bin), if it still matches
+    the reference .py, the manifest and the data; else None."""
+    import produce_refs  # imports this module, so not at the top
+
+    state, _why = produce_refs.cache_state(model_dir, name, ref_module)
+    if state != "valid":
+        return None
+    return np.fromfile(produce_refs.cache_paths(model_dir, name)[0], dtype=np.float32)
 
 
 # ---------------------------------------------------------------------------
@@ -864,9 +877,11 @@ def process_model(model_dir, args):
     ref_source = None
     if ref_module is not None:
         print(f"[{name}] found torch reference: {ref_module}")
-        ref = run_torch_reference(
-            ref_module, weights_path, input_path, shape, manifest
-        )
+        ref = load_cached_reference(model_dir, name, ref_module)
+        if ref is None:
+            ref = run_torch_reference(
+                ref_module, weights_path, input_path, shape, manifest
+            )
         if ref is not None:
             ref_source = f"torch:{os.path.relpath(ref_module, model_dir)}"
 
