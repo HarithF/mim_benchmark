@@ -33,13 +33,18 @@ CHILD = "--child"
 class Model:
     """Everything a call needs that is read from disk, so it stays untimed."""
 
-    def __init__(self, meta_path, weights_path, input_path):
+    def __init__(self, meta_path, weights_path, input_path, load_data=True):
         self.meta_dir = os.path.dirname(os.path.abspath(meta_path))
         self.meta = json.load(open(meta_path))
         manifests = glob.glob(os.path.join(os.path.dirname(os.path.abspath(weights_path)), "*_params.json"))
         if len(manifests) != 1:
             sys.exit(f"expected one *_params.json next to {weights_path}, found {manifests}")
         self.manifest = json.load(open(manifests[0]))
+        self.device = os.environ.get("IREE_DEVICE") or {"cuda": "cuda", "llvm-cpu": "local-sync"}[self.meta["target"]]
+        # The supervising process only writes the report; holding the weights
+        # there too doubles the memory of a multi-GB model for nothing.
+        if not load_data:
+            return
         blob = np.fromfile(weights_path, dtype=np.uint8)
         slots = {e["name"]: e for e in self.manifest["entries"] if e.get("named")}
         missing = [p for p in self.meta["params"] if p not in slots]
@@ -54,7 +59,6 @@ class Model:
             sys.exit("only single-input models are supported")
         spec = self.meta["inputs"][0]
         self.x = np.fromfile(input_path, dtype=DTYPES[spec["dtype"]]).reshape(spec["shape"])
-        self.device = os.environ.get("IREE_DEVICE") or {"cuda": "cuda", "llvm-cpu": "local-sync"}[self.meta["target"]]
 
     def run(self):
         """Sets the device and module up and calls `main` once; returns the output on the host."""
@@ -100,7 +104,7 @@ def main():
     run_id = sys.argv[6] if len(sys.argv) > 6 else datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     json_path = sys.argv[7] if len(sys.argv) > 7 else None
     reps = max(int(reps), 1)
-    m = Model(meta_path, weights_path, input_path)
+    m = Model(meta_path, weights_path, input_path, load_data=False)
 
     # Like the C drivers: one warm-up call in its own process, then the timed ones.
     rep(meta_path, weights_path, input_path, "", "warm-up")
