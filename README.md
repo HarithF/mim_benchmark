@@ -46,7 +46,7 @@ Results and the artifact-evaluation write-up (including what each compile-time s
 `FRONTEND_REF` and `FRONTEND` override it, and an existing checkout is reused)
 and runs its `bootstrap_mimir.sh`, which builds MimIR with its plugins and the
 Python environment. The LLVM/MLIR tools and a Python with torch-mlir have to be
-provided separately (see the table below); the [Docker image](https://doi.org/10.5281/zenodo.24295393) on Zenodo, which contains this
+provided separately (see the table below); the [Docker image](https://doi.org/10.5281/zenodo.24303581) on Zenodo, which contains this
 harness, provides all of it and can be used instead.
 
 ## Usage

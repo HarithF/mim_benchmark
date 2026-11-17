@@ -37,12 +37,12 @@ measures this for every model and pipeline, split into the individual compile st
 | Code licenses | MimIR MIT; LLVM, MLIR, Torch-MLIR and IREE Apache 2.0 with LLVM exceptions; PyTorch BSD-3-Clause; front end and harness MIT |
 | Data licenses | KernelBench MIT |
 | Workflow frameworks used | Bash and Python scripts; optionally Docker |
-| Archived | [10.5281/zenodo.24295393](https://doi.org/10.5281/zenodo.24295393) (Zenodo) |
+| Archived | [10.5281/zenodo.24303581](https://doi.org/10.5281/zenodo.24303581) (Zenodo) |
 
 ## How to access
 
 This harness is at <https://github.com/HarithF/mim_benchmark>, the MimIR front end at
-<https://github.com/HarithF/mimir-frontend> (branch `art-eval`). The paper's Zenodo record ([10.5281/zenodo.24295393](https://doi.org/10.5281/zenodo.24295393)) holds the Docker image, which
+<https://github.com/HarithF/mimir-frontend> (branch `art-eval`). The paper's Zenodo record ([10.5281/zenodo.24303581](https://doi.org/10.5281/zenodo.24303581)) holds the Docker image, which
 contains checkouts of these repositories.
 
 ## Dependencies
