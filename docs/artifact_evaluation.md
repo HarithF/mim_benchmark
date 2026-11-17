@@ -1,7 +1,6 @@
 # Artifact evaluation
 
-This page follows the artifact appendix of the paper, from the point of view of this harness. Values
-the paper has not fixed yet are marked *TBD*. Results: [`results_cpu.md`](results_cpu.md) and
+This page follows the artifact appendix of the paper, from the point of view of this harness. Results: [`results_cpu.md`](results_cpu.md) and
 [`results_gpu.md`](results_gpu.md).
 
 ## Abstract
@@ -31,20 +30,20 @@ measures this for every model and pipeline, split into the individual compile st
 | Metrics | execution time (median of 10 repetitions), compile time, numerical agreement with PyTorch, non-blank non-comment lines of code |
 | Output | per-model JSON reports, `timing.csv`, `compile_times.csv`, geometric means in `summary.md` |
 | Experiments | E1 (CPU), E2 (compile time), E3 (GPU); the paper's E4 (lines of code) is not part of this harness |
-| Disk space | *TBD* GB for results; with Docker, *TBD* GB for the image |
+| Disk space | about 50 GB for results (`work/` 33 GB, `work_gpu/` 16 GB); with Docker, 16 GB for the image (5 GB compressed) |
 | Time to prepare workflow | `./setup.sh` builds the MimIR front end; with Docker, about 20 min to load the image or about 1.5 h on 16 cores to build it |
-| Time to complete experiments | basic test *TBD* min; E1 and E2 *TBD* h, of which about 2 h are timed runs; E3 *TBD* h |
+| Time to complete experiments | basic test about 1 min; E1 and E2 about 4 h, of which about 3 h are timed runs; E3 about 1 h |
 | Publicly available | yes |
 | Code licenses | MimIR MIT; LLVM, MLIR, Torch-MLIR and IREE Apache 2.0 with LLVM exceptions; PyTorch BSD-3-Clause; front end and harness MIT |
 | Data licenses | KernelBench MIT |
 | Workflow frameworks used | Bash and Python scripts; optionally Docker |
-| Archived | *TBD* (Zenodo DOI) |
+| Archived | [10.5281/zenodo.24295393](https://doi.org/10.5281/zenodo.24295393) (Zenodo) |
 
 ## How to access
 
 This harness is at <https://github.com/HarithF/mim_benchmark>, the MimIR front end at
-<https://github.com/HarithF/mimir-frontend> (branch `art-eval`). The paper's Zenodo record (*TBD*) holds the Docker image and
-snapshots of these repositories.
+<https://github.com/HarithF/mimir-frontend> (branch `art-eval`). The paper's Zenodo record ([10.5281/zenodo.24295393](https://doi.org/10.5281/zenodo.24295393)) holds the Docker image, which
+contains checkouts of these repositories.
 
 ## Dependencies
 
@@ -123,7 +122,7 @@ the ratio of every model. In the geometric mean, MimIR → LLVM runs at 0.74× a
 at 0.93× the reference. The direct backend wins on the MLPs, the Inception module, the MBConv block,
 the ShuffleNets, VGG16 and VGG19, and falls behind on the attention models (MinGPTCausalAttention,
 SwinMLP, MiniGPTBlock, ReLUSelfAttention) and on LeNet5, ResNet18 and AlexNet. The route through
-MLIR stays within 0.49× to 1.29×. We consider the claim reproduced if *TBD*.
+MLIR stays within 0.49× to 1.29×.
 
 ### E2: Compile time
 
